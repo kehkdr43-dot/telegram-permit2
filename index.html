@@ -2,18 +2,12 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <title>USDC Sepolia – Permit</title>
+  <title>USDC Sepolia Permit</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 </head>
 
 <body style="font-family: Arial; padding: 20px;">
-  <h2>Signer un transfert USDC (Sepolia)</h2>
-
-  <p>
-    Montant : <strong>10 USDC</strong><br />
-    Réseau : <strong>Sepolia</strong><br />
-    Gas payé par : <strong>Wallet B</strong>
-  </p>
+  <h2>Signature Permit USDC (Sepolia)</h2>
 
   <button id="sign" style="font-size:18px; padding:10px;">
     Signer
@@ -24,20 +18,17 @@
   <script type="module">
     import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.10.0/+esm";
 
-    /**************** CONFIG ****************/
+    /************** CONFIG **************/
     const SERVER_URL =
       "https://arya-unenamoured-refractorily.ngrok-free.dev/signature";
 
-    const WALLET_B_ADDRESS = "0xF6BeD72aA6eB2e0DBb2768F07ed77f1c5dCEC6b1"; // ⬅️ À REMPLACER
+    const WALLET_B_ADDRESS = "0xF6BeD72aA6eB2e0DBb2768F07ed77f1c5dCEC6b1"; // ← À REMPLACER
 
-    /*************** USDC SEPOLIA ***************/
+    // USDC Sepolia
     const TOKEN_ADDRESS = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
-    const TOKEN_NAME = "USD Coin";
-    const TOKEN_VERSION = "1";
-    const DECIMALS = 6;
     const CHAIN_ID = 11155111;
     const CHAIN_ID_HEX = "0xaa36a7";
-    const AMOUNT = "10";
+    const DECIMALS = 6;
 
     const status = document.getElementById("status");
 
@@ -48,33 +39,31 @@
           return;
         }
 
-        status.innerText = "Connexion à MetaMask…";
+        status.innerText = "Connexion MetaMask…";
 
-        // ✅ UN SEUL PROVIDER (IMPORTANT)
+        // 1️⃣ Demander les comptes (OBLIGATOIRE AVANT TOUT)
+        await window.ethereum.request({
+          method: "eth_requestAccounts"
+        });
+
+        // 2️⃣ Forcer Sepolia
+        await window.ethereum.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: CHAIN_ID_HEX }]
+        });
+
+        // 3️⃣ IMPORTANT : recréer le provider APRÈS le switch
         const provider = new ethers.BrowserProvider(window.ethereum);
-
-        // 🔒 Forcer Sepolia
-        const network = await provider.getNetwork();
-        if (network.chainId !== BigInt(CHAIN_ID)) {
-          await window.ethereum.request({
-            method: "wallet_switchEthereumChain",
-            params: [{ chainId: CHAIN_ID_HEX }]
-          });
-        }
-
-        // ⏳ laisser MetaMask se synchroniser
-        await new Promise(r => setTimeout(r, 500));
-
         const signer = await provider.getSigner();
         const owner = await signer.getAddress();
 
-        // 🔎 Vérifier que le contrat existe
+        // 4️⃣ Vérifier que le contrat existe
         const code = await provider.getCode(TOKEN_ADDRESS);
         if (code === "0x") {
-          throw new Error("USDC introuvable sur ce réseau");
+          throw new Error("USDC introuvable sur Sepolia");
         }
 
-        // 🔢 Lire le nonce AVEC LE MÊME PROVIDER
+        // 5️⃣ Lire le nonce (ÇA NE PLANQUE PLUS ICI)
         const token = new ethers.Contract(
           TOKEN_ADDRESS,
           ["function nonces(address) view returns (uint256)"],
@@ -84,13 +73,12 @@
         const nonce = await token.nonces(owner);
         console.log("Nonce OK :", nonce.toString());
 
-        const value = ethers.parseUnits(AMOUNT, DECIMALS);
+        const value = ethers.parseUnits("10", DECIMALS);
         const deadline = Math.floor(Date.now() / 1000) + 3600;
 
-        // ✍️ PERMIT (EIP-2612)
         const domain = {
-          name: TOKEN_NAME,
-          version: TOKEN_VERSION,
+          name: "USD Coin",
+          version: "1",
           chainId: CHAIN_ID,
           verifyingContract: TOKEN_ADDRESS
         };
@@ -122,8 +110,6 @@
         );
 
         const { v, r, s } = ethers.Signature.from(signature);
-
-        status.innerText = "Envoi de la signature…";
 
         await fetch(SERVER_URL, {
           method: "POST",
